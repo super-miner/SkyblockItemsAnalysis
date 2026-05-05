@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { sleep, formatUrl } from "../httpUtil.js";
 import { readJsonFile, writeJsonFile, writeTsvFile } from "../ioUtil.js";
-import { formatInfoboxData, normalizePageContents } from "./fandomUtil.js";
+import { formatInfoboxData, normalizePageContents, parseInfoboxTabs } from "./fandomUtil.js";
 import wtf from "wtf_wikipedia";
 
 const SLEEP_TIME = 1800;
@@ -133,12 +133,33 @@ function formatPagesData(pagesData) {
         const pageContents = normalizePageContents(pageData.revisions[0]["*"]);
         const pageDoc = wtf(pageContents);
 
+        let data = {};
+
+        data.admin_only = false;
+        data.title = pageData.title;
+
+        const templates = pageDoc.templates();
+        for (const template of templates) {
+            switch(template.wikitext()) {
+                case "{{Admin only}}":
+                    data.admin_only = true;
+                    break;
+                case "{{Historical article}}":
+                    data.historical = true;
+                    break;
+            }
+        }
+
         const infoboxes = pageDoc.infoboxes();
         for (const infobox of infoboxes) {
-            const data = formatInfoboxData(infobox);
-            data.title = pageData.title;
+            const infoboxData = formatInfoboxData(infobox);
 
-            result.push(data);
+            const tabs = parseInfoboxTabs(infoboxData);
+            for (const tab of tabs) {
+                const perTabData = {...data, ...tab};
+
+                result.push(perTabData);
+            }
         }
     }
 
